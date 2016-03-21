@@ -6,20 +6,154 @@
 SoftwareSerial Xbee (Rx, Tx);
 const int buttonPin = 2;
 const int ledPin = 3;
+const int middleSensor = 4;
+const int rightSensor = 5;
+const int leftSensor = 6;
 const int rightServoSensor = 12;
 const int leftServoSensor = 13;
+const int THRESHOLD =50; // To update
 int buttonState = 0;
+Servo servoRight;
+Servo servoLeft;
 
 void setup() {
   Serial.begin(9600);
   Xbee.begin(9600);
   setupCommunication();
-  Serial.println("Start");
+  setupServos();
 }
 
 void setupCommunication(){
   pinMode(buttonPin, INPUT);
   pinMode(ledPin, OUTPUT);
+}
+
+void setupServos(){
+  servoRight.attach(rightServoSensor);
+  servoLeft.attach(leftServoSensor);
+}
+
+void loop(){
+  while(true){
+    lineFollow();
+  }
+}
+
+void lineFollow(){
+  long leftRc = rcTime(leftSensor);
+  long middleRc = rcTime(middleSensor);
+  long rightRc = rcTime(rightSensor);
+  Serial.println("**");
+  Serial.println("*");
+  Serial.println(leftRc);
+  Serial.println(middleRc);
+  Serial.println(rightRc);
+  Serial.println("*");
+  if(leftRc == true && middleRc == true && rightRc == true){
+    stop();
+  }
+  if(leftRc == false && middleRc == false && rightRc == false){
+    goBackward();
+  }
+  else if(leftRc == true && rightRc == true){
+    goForward();
+  }
+  else if(middleRc == true && rightRc == true){
+    turnFastRight();
+  }
+  else if(leftRc == true && middleRc == true){
+    turnFastLeft();
+  }
+  else if(middleRc == true){
+    goForward();
+  }
+  else if(leftRc == true){
+    turnLeft();
+  }
+  else if(rightRc == true){
+    turnRight();
+  }
+}
+
+//ColorPAL
+void readColorPal(){
+  // TODO
+}
+
+void stop(){
+  pauseLeft();
+  pauseRight();
+}
+
+void goForward(){
+  turnRightCW();
+  turnLeftCCW();
+}
+
+void goBackward(){
+  turnRightCCW();
+  turnLeftCW();
+}
+
+void turnRight(){
+  turnLeftCCW();
+  pauseRight();
+}
+
+void turnLeft(){
+  turnRightCW();
+  pauseLeft();
+}
+
+void turnRightCW(){
+  servoRight.writeMicroseconds(1300);
+}
+
+void turnRightCCW(){
+  servoRight.writeMicroseconds(1700);
+}
+
+void turnLeftCW(){
+  servoLeft.writeMicroseconds(1300);
+}
+
+void turnLeftCCW(){
+  servoLeft.writeMicroseconds(1700);
+}
+
+void pauseLeft(){
+  servoLeft.writeMicroseconds(1500);
+}
+
+void pauseRight(){
+  servoRight.writeMicroseconds(1500);
+}
+
+void turnFastLeft(){
+  turnRightCW();
+  turnLeftCCW();
+}
+
+void turnFastRight(){
+  turnLeftCCW();
+  turnRightCCW();
+}
+
+// Darker -> smaller rcTime
+boolean rcTime(int sensPin){
+  long result = 0;
+  pinMode(sensPin, OUTPUT);
+  digitalWrite(sensPin, HIGH); // high to QTI sensor
+  delay(100); // delays for 1 ms
+  pinMode(sensPin, INPUT); // sets to input in order to read the decay
+  digitalWrite(sensPin, LOW);
+  while(digitalRead(sensPin)){ // checks length of decay
+    result++;
+  }
+  Serial.println(result);
+  if(result > THRESHOLD)
+    return true;
+    return false;
 }
 
 void checkButtonPress(){
