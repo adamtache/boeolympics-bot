@@ -1,0 +1,60 @@
+}#include <SoftwareSerial.h>
+#include <Servo.h>
+#define Rx 10 // DOUT to pin 10
+#define Tx 11 // DIN to pin 11
+
+SoftwareSerial Xbee (Rx, Tx);
+const int buttonPin = 2;
+const int ledPin = 3;
+const int rightServoSensor = 12;
+const int leftServoSensor = 13;
+int buttonState = 0;
+
+void setup() {
+  Serial.begin(9600);
+  Xbee.begin(9600);
+  setupCommunication();
+  Serial.println("Start");
+}
+
+void setupCommunication(){
+  pinMode(buttonPin, INPUT);
+  pinMode(ledPin, OUTPUT);
+}
+
+void checkButtonPress(){
+  buttonState = digitalRead(buttonPin);
+  if(buttonState == HIGH){
+    char myChar = 'a';
+    Xbee.print(myChar);
+  }
+}
+
+void checkSerial(){
+  if(Serial.available()){
+    char outgoing = Serial.read();
+    Xbee.print(outgoing);
+  }
+}
+
+void checkXbee(){
+  if(Xbee.available()){
+    char incoming = Xbee.read();
+    Serial.println(incoming);
+    ledSecond();
+  }
+}
+
+void ledOn(){
+  digitalWrite(ledPin, HIGH);
+}
+
+void ledOff(){
+  digitalWrite(ledPin, LOW);
+}
+
+void ledSecond(){
+  ledOn();
+  delay(1000);
+  ledOff();
+}
