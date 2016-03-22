@@ -1,4 +1,4 @@
-}#include <SoftwareSerial.h>
+#include <SoftwareSerial.h>
 #include <Servo.h>
 #define Rx 10 // DOUT to pin 10
 #define Tx 11 // DIN to pin 11
@@ -11,7 +11,7 @@ const int rightSensor = 5;
 const int leftSensor = 6;
 const int rightServoSensor = 12;
 const int leftServoSensor = 13;
-const int THRESHOLD =50; // To update
+const int THRESHOLD = 50; // To update
 int buttonState = 0;
 Servo servoRight;
 Servo servoLeft;
@@ -34,45 +34,50 @@ void setupServos(){
 }
 
 void loop(){
+  boolean lastBack = false;
   while(true){
-    lineFollow();
+    lineFollow(lastBack);
   }
 }
 
-void lineFollow(){
+boolean lineFollow(boolean lastBack){
   long leftRc = rcTime(leftSensor);
   long middleRc = rcTime(middleSensor);
   long rightRc = rcTime(rightSensor);
-  Serial.println("**");
-  Serial.println("*");
-  Serial.println(leftRc);
-  Serial.println(middleRc);
-  Serial.println(rightRc);
-  Serial.println("*");
-  if(leftRc == true && middleRc == true && rightRc == true){
+  if(!leftRc && !middleRc && !rightRc){
+    if(lastBack){
+      goForward();
+      return false;
+    }
+    else{
+      goBackward();
+      return true;
+    }
+  }
+  else if(leftRc && middleRc && rightRc){
     stop();
-  }
-  if(leftRc == false && middleRc == false && rightRc == false){
-    goBackward();
-  }
-  else if(leftRc == true && rightRc == true){
+    delay(1000);
     goForward();
   }
-  else if(middleRc == true && rightRc == true){
+  else if(leftRc && rightRc){
+    goForward();
+  }
+  else if(middleRc && rightRc){
     turnFastRight();
   }
-  else if(leftRc == true && middleRc == true){
+  else if(leftRc && middleRc){
     turnFastLeft();
   }
-  else if(middleRc == true){
+  else if(middleRc){
     goForward();
   }
-  else if(leftRc == true){
+  else if(leftRc){
     turnLeft();
   }
-  else if(rightRc == true){
+  else if(rightRc){
     turnRight();
   }
+  return false;
 }
 
 //ColorPAL
@@ -106,19 +111,19 @@ void turnLeft(){
 }
 
 void turnRightCW(){
-  servoRight.writeMicroseconds(1300);
+  servoRight.writeMicroseconds(1450);
 }
 
 void turnRightCCW(){
-  servoRight.writeMicroseconds(1700);
+  servoRight.writeMicroseconds(1550);
 }
 
 void turnLeftCW(){
-  servoLeft.writeMicroseconds(1300);
+  servoLeft.writeMicroseconds(1450);
 }
 
 void turnLeftCCW(){
-  servoLeft.writeMicroseconds(1700);
+  servoLeft.writeMicroseconds(1550);
 }
 
 void pauseLeft(){
@@ -150,10 +155,7 @@ boolean rcTime(int sensPin){
   while(digitalRead(sensPin)){ // checks length of decay
     result++;
   }
-  Serial.println(result);
-  if(result > THRESHOLD)
-    return true;
-    return false;
+  return result > THRESHOLD;
 }
 
 void checkButtonPress(){
@@ -174,7 +176,6 @@ void checkSerial(){
 void checkXbee(){
   if(Xbee.available()){
     char incoming = Xbee.read();
-    Serial.println(incoming);
     ledSecond();
   }
 }
