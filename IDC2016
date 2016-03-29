@@ -2,20 +2,21 @@
 #include <Servo.h>
 #define Rx 10 // DOUT to pin 10
 #define Tx 11 // DIN to pin 11
-
+ 
 SoftwareSerial Xbee (Rx, Tx);
 const int buttonPin = 2;
 const int ledPin = 3;
 const int middleSensor = 4;
 const int rightSensor = 5;
 const int leftSensor = 6;
+const int colorPal = 8;
 const int rightServoSensor = 12;
 const int leftServoSensor = 13;
-const int THRESHOLD = 50; // To update
+const int THRESHOLD = 60;
 int buttonState = 0;
 Servo servoRight;
 Servo servoLeft;
-
+ 
 void setup() {
   Serial.begin(9600);
   Xbee.begin(9600);
@@ -27,135 +28,24 @@ void setupCommunication(){
   pinMode(buttonPin, INPUT);
   pinMode(ledPin, OUTPUT);
 }
-
+ 
 void setupServos(){
   servoRight.attach(rightServoSensor);
   servoLeft.attach(leftServoSensor);
 }
 
 void loop(){
-  boolean lastBack = false;
+  communicate();
+  checkColor();
   while(true){
-    lineFollow(lastBack);
+    lineFollow();
   }
 }
 
-boolean lineFollow(boolean lastBack){
-  long leftRc = rcTime(leftSensor);
-  long middleRc = rcTime(middleSensor);
-  long rightRc = rcTime(rightSensor);
-  if(!leftRc && !middleRc && !rightRc){
-    if(lastBack){
-      goForward();
-      return false;
-    }
-    else{
-      goBackward();
-      return true;
-    }
-  }
-  else if(leftRc && middleRc && rightRc){
-    stop();
-    delay(1000);
-    goForward();
-  }
-  else if(leftRc && rightRc){
-    goForward();
-  }
-  else if(middleRc && rightRc){
-    turnFastRight();
-  }
-  else if(leftRc && middleRc){
-    turnFastLeft();
-  }
-  else if(middleRc){
-    goForward();
-  }
-  else if(leftRc){
-    turnLeft();
-  }
-  else if(rightRc){
-    turnRight();
-  }
-  return false;
-}
-
-//ColorPAL
-void readColorPal(){
-  // TODO
-}
-
-void stop(){
-  pauseLeft();
-  pauseRight();
-}
-
-void goForward(){
-  turnRightCW();
-  turnLeftCCW();
-}
-
-void goBackward(){
-  turnRightCCW();
-  turnLeftCW();
-}
-
-void turnRight(){
-  turnLeftCCW();
-  pauseRight();
-}
-
-void turnLeft(){
-  turnRightCW();
-  pauseLeft();
-}
-
-void turnRightCW(){
-  servoRight.writeMicroseconds(1450);
-}
-
-void turnRightCCW(){
-  servoRight.writeMicroseconds(1550);
-}
-
-void turnLeftCW(){
-  servoLeft.writeMicroseconds(1450);
-}
-
-void turnLeftCCW(){
-  servoLeft.writeMicroseconds(1550);
-}
-
-void pauseLeft(){
-  servoLeft.writeMicroseconds(1500);
-}
-
-void pauseRight(){
-  servoRight.writeMicroseconds(1500);
-}
-
-void turnFastLeft(){
-  turnRightCW();
-  turnLeftCCW();
-}
-
-void turnFastRight(){
-  turnLeftCCW();
-  turnRightCCW();
-}
-
-// Darker -> smaller rcTime
-boolean rcTime(int sensPin){
-  long result = 0;
-  pinMode(sensPin, OUTPUT);
-  digitalWrite(sensPin, HIGH); // high to QTI sensor
-  delay(100); // delays for 1 ms
-  pinMode(sensPin, INPUT); // sets to input in order to read the decay
-  digitalWrite(sensPin, LOW);
-  while(digitalRead(sensPin)){ // checks length of decay
-    result++;
-  }
-  return result > THRESHOLD;
+void communicate(){
+  checkButtonPress();
+  checkXbee();
+  checkSerial();
 }
 
 void checkButtonPress(){
@@ -165,31 +55,182 @@ void checkButtonPress(){
     Xbee.print(myChar);
   }
 }
-
+ 
 void checkSerial(){
   if(Serial.available()){
     char outgoing = Serial.read();
     Xbee.print(outgoing);
   }
 }
-
+ 
 void checkXbee(){
   if(Xbee.available()){
     char incoming = Xbee.read();
+    Serial.println(incoming);
     ledSecond();
   }
 }
+ 
+void lineFollow(){
+  boolean left = rcToBool(leftSensor);
+  boolean middle = rcToBool(middleSensor);
+  boolean right = rcToBool(rightSensor);
+  if(left && middle && right){
+    pauseThenGo();
+  }
+  else if(!left && !middle && !right){
+    goForward();
+  }
+  else if(middle && right){
+    turnFastRight();
+  }
+  else if(left && middle){
+    turnFastLeft();
+  }
+  else if(middle){
+    goForward();
+  }
+  else if(left){
+    turnLeft();
+  }
+  else if(right){
+    turnRight();
+  }
+}
 
+void readColorPal(){
+  
+}
+
+void stop(){
+  pauseLeft();
+  pauseRight();
+}
+
+void pauseThenGo(){
+  stop();
+  delay(1000);
+  goForward();
+}
+ 
+void goForward(){
+  turnRightCWSlow();
+  turnLeftCCWSlow();
+}
+
+void goBackward(){
+  turnRightCCW();
+  turnLeftCW();
+}
+ 
+void turnRight(){
+  turnLeftCCW();
+  pauseRight();
+}
+ 
+void turnLeft(){
+  turnRightCW();
+  pauseLeft();
+}
+
+void turnFastLeft(){
+  turnRightCW();
+  turnLeftCCW();
+}
+ 
+void turnFastRight(){
+  turnLeftCCW();
+  turnRightCW();
+}
+ 
+void turnRightCW(){
+  servoRight.writeMicroseconds(1460);
+}
+ 
+void turnRightCCW(){
+  servoRight.writeMicroseconds(1540);
+}
+ 
+void turnLeftCW(){
+  servoLeft.writeMicroseconds(1460);
+}
+ 
+void turnLeftCCW(){
+  servoLeft.writeMicroseconds(1540);
+}
+ 
+void pauseLeft(){
+  servoLeft.writeMicroseconds(1500);
+}
+ 
+void pauseRight(){
+  servoRight.writeMicroseconds(1500);  
+}
+
+void turnRightCWSlow(){
+  servoRight.writeMicroseconds(1480);
+}
+
+void turnLeftCCWSlow(){
+  servoLeft.writeMicroseconds(1520);
+}
+
+long rcTime(int sensPin){
+  long result = 0;
+  pinMode(sensPin, OUTPUT);
+  digitalWrite(sensPin, HIGH);
+  delay(100);
+  pinMode(sensPin, INPUT);
+  digitalWrite(sensPin, LOW);
+  while(digitalRead(sensPin)){
+    result++;
+  }
+  return result;
+}
+
+boolean rcToBool(int sensPin){
+  long rc = rcTime(sensPin);
+  return rc > THRESHOLD;
+}
+ 
 void ledOn(){
   digitalWrite(ledPin, HIGH);
 }
-
+ 
 void ledOff(){
   digitalWrite(ledPin, LOW);
 }
-
+ 
 void ledSecond(){
   ledOn();
   delay(1000);
   ledOff();
+}
+
+void ledFlicker(){
+  for(int x=0; x<5; x++){
+    ledOn();
+    delay(20);
+    ledOff();
+  }
+}
+
+void checkColor(){
+  int trials = 10;
+  long sum = 0;
+  while(trials > 0){
+    long result = rcTime(middleSensor);
+    sum += result;
+    trials--;
+  }
+  long avg = sum/10;
+  if(avg > 100){ // BLACK
+    ledSecond();
+  }
+  else if(avg > 20){ // GREY
+    ledFlicker();
+  }
+  else if(avg < 20){ // WHITE
+    ledOn();
+  }
 }
