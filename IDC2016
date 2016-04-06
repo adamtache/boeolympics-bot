@@ -12,16 +12,29 @@ const int leftSensor = 6;
 const int colorPal = 8;
 const int rightServoSensor = 12;
 const int leftServoSensor = 13;
-const int THRESHOLD = 60;
+const int THRESHOLD = 30; // QTI threshold for black line detection
 int buttonState = 0;
 Servo servoRight;
 Servo servoLeft;
- 
-void setup() {
+int red;
+int green;
+int blue;
+const int sio = 53; 
+const int unused =7; // Non-existant pin for SoftwareSerial
+const int sioBaud = 4800;
+SoftwareSerial serin(sio, unused);
+SoftwareSerial serout(unused, sio);
+
+void setup(){
   Serial.begin(9600);
-  Xbee.begin(9600);
+  Xbee.begin(9600);  
   setupCommunication();
   setupServos();
+}
+
+void loop(){
+  communicate();
+  lineFollow();
 }
 
 void setupCommunication(){
@@ -32,14 +45,6 @@ void setupCommunication(){
 void setupServos(){
   servoRight.attach(rightServoSensor);
   servoLeft.attach(leftServoSensor);
-}
-
-void loop(){
-  communicate();
-  checkColor();
-  while(true){
-    lineFollow();
-  }
 }
 
 void communicate(){
@@ -70,109 +75,45 @@ void checkXbee(){
     ledSecond();
   }
 }
- 
+
+// Line follows any path
+// Specific IDC task: follow a circle and when reach tick, go to center of circle and read color of inner court
+// A tick is a horizontal black line that all 3 QTI sensors would detect as black
 void lineFollow(){
-  boolean left = rcToBool(leftSensor);
-  boolean middle = rcToBool(middleSensor);
-  boolean right = rcToBool(rightSensor);
-  if(left && middle && right){
-    pauseThenGo();
+  boolean tickReached = false;
+  int numLeftTurns = 0;
+  int numRightTurns = 0;
+  while(!tickReached){
+    boolean left = rcToBool(leftSensor);
+    boolean middle = rcToBool(middleSensor);
+    boolean right = rcToBool(rightSensor);
+    if(left && middle && right){
+      tickReached = true;
+      pauseTurnGo(numLeftTurns, numRightTurns);
+    }
+    else if(!left && !right && !middle){
+      goForward();
+    }
+    else if(middle && right){
+      turnRight();
+      numRightTurns++;
+    }
+    else if(left && middle){
+      turnLeft();
+      numLeftTurns++;
+    }
+    else if(middle){
+      goForward();
+    }
+    else if(left){
+      turnLeft();
+      numLeftTurns++;
+    }
+    else if(right){
+      turnRight();
+      numRightTurns++;
+    }
   }
-  else if(!left && !middle && !right){
-    goForward();
-  }
-  else if(middle && right){
-    turnFastRight();
-  }
-  else if(left && middle){
-    turnFastLeft();
-  }
-  else if(middle){
-    goForward();
-  }
-  else if(left){
-    turnLeft();
-  }
-  else if(right){
-    turnRight();
-  }
-}
-
-void readColorPal(){
-  
-}
-
-void stop(){
-  pauseLeft();
-  pauseRight();
-}
-
-void pauseThenGo(){
-  stop();
-  delay(1000);
-  goForward();
-}
- 
-void goForward(){
-  turnRightCWSlow();
-  turnLeftCCWSlow();
-}
-
-void goBackward(){
-  turnRightCCW();
-  turnLeftCW();
-}
- 
-void turnRight(){
-  turnLeftCCW();
-  pauseRight();
-}
- 
-void turnLeft(){
-  turnRightCW();
-  pauseLeft();
-}
-
-void turnFastLeft(){
-  turnRightCW();
-  turnLeftCCW();
-}
- 
-void turnFastRight(){
-  turnLeftCCW();
-  turnRightCW();
-}
- 
-void turnRightCW(){
-  servoRight.writeMicroseconds(1460);
-}
- 
-void turnRightCCW(){
-  servoRight.writeMicroseconds(1540);
-}
- 
-void turnLeftCW(){
-  servoLeft.writeMicroseconds(1460);
-}
- 
-void turnLeftCCW(){
-  servoLeft.writeMicroseconds(1540);
-}
- 
-void pauseLeft(){
-  servoLeft.writeMicroseconds(1500);
-}
- 
-void pauseRight(){
-  servoRight.writeMicroseconds(1500);  
-}
-
-void turnRightCWSlow(){
-  servoRight.writeMicroseconds(1480);
-}
-
-void turnLeftCCWSlow(){
-  servoLeft.writeMicroseconds(1520);
 }
 
 long rcTime(int sensPin){
@@ -192,7 +133,256 @@ boolean rcToBool(int sensPin){
   long rc = rcTime(sensPin);
   return rc > THRESHOLD;
 }
+
+void stop(){
+  pauseLeft();
+  pauseRight();
+}
+
+void pauseTurnGo(int numLeftTurns, int numRightTurns){
+  stop();
+  delay(1000);
+  if(numLeftTurns < numRightTurns){
+    turnRight90();
+  }
+  else{
+    turnLeft90();
+  }
+  goToCenter();
+}
  
+void goForward(){
+  turnRightCWSlow();
+  turnLeftCCWSlow();
+}
+
+void goToCenter(){
+  goForward();
+  delay(4500);
+  pauseLeft();
+  pauseRight();
+  checkBoardColor();
+}
+
+void goBackward(){
+  turnRightCCW();
+  turnLeftCW();
+}
+ 
+void turnRight(){
+  turnLeftCCW();
+  pauseRight();
+}
+
+void turnRight90(){
+  turnRight();
+  delay(getTurnDelay());
+  pauseLeft();
+}
+
+void turnLeft90(){
+  turnLeft();
+  delay(getTurnDelay());
+  pauseRight();
+}
+
+int getTurnDelay(){
+  return 2000;
+}
+ 
+void turnLeft(){
+  turnRightCW();
+  pauseLeft();
+}
+
+void turnFastLeft(){
+  turnRightCW();
+  turnLeftCCW();
+}
+ 
+void turnFastRight(){
+  turnLeftCCW();
+  turnRightCW();
+}
+ 
+void turnRightCW(){
+  servoRight.writeMicroseconds(getCWTime());
+}
+ 
+void turnRightCCW(){
+  servoRight.writeMicroseconds(getCCWTime());
+}
+ 
+void turnLeftCW(){
+  servoLeft.writeMicroseconds(getCWTime());
+}
+ 
+void turnLeftCCW(){
+  servoLeft.writeMicroseconds(getCCWTime());
+}
+ 
+void pauseLeft(){
+  servoLeft.writeMicroseconds(getStopTime());
+}
+ 
+void pauseRight(){
+  servoRight.writeMicroseconds(getStopTime());  
+}
+
+void turnRightCWSlow(){
+  servoRight.writeMicroseconds(getFastCWTime());
+}
+
+void turnLeftCCWSlow(){
+  servoLeft.writeMicroseconds(getFastCCWTime());
+}
+
+int getCWTime(){
+  return 1450;
+}
+
+int getCCWTime(){
+  return 1550;
+}
+
+int getStopTime(){
+  return 1500;
+}
+
+int getFastCWTime(){
+  return 1480;
+}
+
+int getFastCCWTime(){
+  return 1520;
+}
+
+void detachServos(){
+  servoLeft.detach();
+  servoRight.detach();
+}
+
+void setupColorPAL(){
+  detachServos(); // Distributes power to ColorPAL
+  resetColorPal();
+  serout.begin(sioBaud);
+  pinMode(sio, OUTPUT);
+  serout.print("= (00 $ m) !"); // Loops print values, specific from ColorPAL documentation
+  serout.end(); // Discontinue serial port for transmitting
+  serin.begin(sioBaud); // Set up serial port for receiving
+  pinMode(sio, INPUT);
+}
+
+// IDC specific task: determine color of three possible multi-colored boards
+// Board 1: Majority black with some white lines
+// Board 2: Majority white with some black lines
+// Board 3: Majority grey with some black lines
+// Takes 10 trials to determine majority color of board
+void checkBoardColor(){
+  int numWhites = 0;
+  int numGreys = 0;
+  int numBlacks = 0;
+  int numTrials = 10;
+  for(int x=0; x<numTrials; x++){
+    setupColorPAL();
+    saveRGBs();
+    if(blue>75){ // White detected
+      numWhites++;
+    }
+    else if(green < 20 && red<20 && blue<20){ // Black detected
+      numBlacks++;
+    }
+    else{ // Grey detected
+      numGreys++; 
+    }
+    setupServos(); // Distributes some power to servos so can move again
+    inchForward(); // Slight movement to read color on different position on board
+  }
+  detachServos();
+  boolean whiteRead = numWhites > 0;
+  boolean blackRead = numBlacks > 0;
+  boolean greyRead = numGreys > 0;
+  if(whiteRead && blackRead){
+    if(max(numWhites, numBlacks) == numWhites){
+      displayWhite();
+    }
+    else{
+      displayBlack();
+    }
+  }
+  else if(greyRead){
+    displayGrey();
+  }
+  else if(whiteRead){
+    displayWhite();
+  }
+  else if(blackRead){
+    displayBlack();
+  }
+}
+
+// Slight movement to re-position bot to new position on board for new color reading
+void inchForward(){
+  goForward();
+  delay(100);
+}
+
+void displayWhite(){
+  ledSecond();
+}
+
+void displayBlack(){
+  ledOn();
+  delay(10000);
+  ledOff();
+}
+
+void displayGrey(){
+  ledFlicker();
+}
+
+void resetColorPal(){
+  delay(200);
+  pinMode(sio, OUTPUT);
+  digitalWrite(sio, LOW);
+  pinMode(sio, INPUT);
+  while (digitalRead(sio) != HIGH);
+  pinMode(sio, OUTPUT);
+  digitalWrite(sio, LOW);
+  delay(80);
+  pinMode(sio, INPUT);
+  delay(200);
+}
+
+void saveRGBs(){
+  char buffer[32];
+  delay(200);
+  if (serin.available() > 0){
+    // Wait for a $ character, then read three 3 digit hex numbers
+    buffer[0] = serin.read();
+    if (buffer[0] == '$'){
+      for(int i = 0; i < 9; i++){
+        while (serin.available() == 0); // Wait for next input character
+        buffer[i] = serin.read();
+        if (buffer[i] == '$') // Return early if $ character encountered
+          return;
+      }
+      parseAndPrint(buffer);
+      delay(10);
+    }
+  }
+}
+
+// Parse the hex data into integers
+void parseAndPrint(char * data){
+  sscanf (data, "%3x%3x%3x", &red, &green, &blue);
+  char buffer[32];
+  sprintf(buffer, "R%4.4d G%4.4d B%4.4d", red, green, blue);
+  Serial.println(buffer);
+}
+
+// LED methods used for displaying results of ColorPAL reading
+
 void ledOn(){
   digitalWrite(ledPin, HIGH);
 }
@@ -200,7 +390,7 @@ void ledOn(){
 void ledOff(){
   digitalWrite(ledPin, LOW);
 }
- 
+
 void ledSecond(){
   ledOn();
   delay(1000);
@@ -209,28 +399,13 @@ void ledSecond(){
 
 void ledFlicker(){
   for(int x=0; x<5; x++){
+    delay(getFlickerDelay());
     ledOn();
-    delay(20);
+    delay(getFlickerDelay());
     ledOff();
   }
 }
 
-void checkColor(){
-  int trials = 10;
-  long sum = 0;
-  while(trials > 0){
-    long result = rcTime(middleSensor);
-    sum += result;
-    trials--;
-  }
-  long avg = sum/10;
-  if(avg > 100){ // BLACK
-    ledSecond();
-  }
-  else if(avg > 20){ // GREY
-    ledFlicker();
-  }
-  else if(avg < 20){ // WHITE
-    ledOn();
-  }
+int getFlickerDelay(){
+  return 20;
 }
